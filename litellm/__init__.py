@@ -771,7 +771,7 @@ azure_llms = {
     "gpt-35-turbo": "azure/gpt-35-turbo",
     "gpt-35-turbo-16k": "azure/gpt-35-turbo-16k",
     "gpt-35-turbo-instruct": "azure/gpt-35-turbo-instruct",
-    "azure/gpt-41":"gpt-4.1", 
+    "azure/gpt-41":"gpt-4.1",
     "azure/gpt-41-mini":"gpt-4.1-mini",
     "azure/gpt-41-nano":"gpt-4.1-nano"
 }
@@ -1214,6 +1214,7 @@ from .llms.azure.responses.o_series_transformation import (
 from .llms.litellm_proxy.responses.transformation import (
     LiteLLMProxyResponsesAPIConfig,
 )
+from .llms.volcengine.responses.transformation import VolcEngineResponsesAPIConfig
 from .llms.openai.chat.o_series_transformation import (
     OpenAIOSeriesConfig as OpenAIO1Config,  # maintain backwards compatibility
     OpenAIOSeriesConfig,

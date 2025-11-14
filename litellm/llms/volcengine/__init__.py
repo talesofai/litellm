@@ -4,6 +4,7 @@ Support for Volcengine (ByteDance) chat and embedding models
 """
 
 from .chat.transformation import VolcEngineChatConfig
+from .responses.transformation import VolcEngineResponsesAPIConfig
 from .common_utils import (
     VolcEngineError,
     get_volcengine_base_url,
@@ -16,6 +17,7 @@ VolcEngineConfig = VolcEngineChatConfig
 
 __all__ = [
     "VolcEngineChatConfig",
+    "VolcEngineResponsesAPIConfig",
     "VolcEngineConfig",  # backward compatibility
     "VolcEngineEmbeddingConfig",
     "VolcEngineError",

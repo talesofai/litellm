@@ -7398,6 +7398,8 @@ class ProviderConfigManager:
                 return litellm.AzureOpenAIOSeriesResponsesAPIConfig()
             else:
                 return litellm.AzureOpenAIResponsesAPIConfig()
+        elif litellm.LlmProviders.VOLCENGINE == provider:
+            return litellm.VolcEngineResponsesAPIConfig()
         elif litellm.LlmProviders.LITELLM_PROXY == provider:
             return litellm.LiteLLMProxyResponsesAPIConfig()
         return None
