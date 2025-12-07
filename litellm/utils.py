@@ -7385,7 +7385,7 @@ class ProviderConfigManager:
             # O-series models (o1, o3) do not contain "gpt" and have different parameter restrictions
             is_gpt_model = model and "gpt" in model.lower()
             is_o_series = model and ("o_series" in model.lower() or (supports_reasoning(model) and not is_gpt_model))
-            
+
             if is_o_series:
                 return litellm.AzureOpenAIOSeriesResponsesAPIConfig()
             else:
@@ -7396,6 +7396,8 @@ class ProviderConfigManager:
             return litellm.GithubCopilotResponsesAPIConfig()
         elif litellm.LlmProviders.LITELLM_PROXY == provider:
             return litellm.LiteLLMProxyResponsesAPIConfig()
+        elif litellm.LlmProviders.VOLCENGINE == provider:
+            return litellm.VolcEngineResponsesAPIConfig()
         return None
 
     @staticmethod
