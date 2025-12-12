@@ -9,6 +9,7 @@ from .common_utils import (
     get_volcengine_base_url,
     get_volcengine_headers,
 )
+from .responses_transformation import VolcEngineResponsesAPIConfig
 from .embedding import VolcEngineEmbeddingConfig
 
 # For backward compatibility, keep the old class name
@@ -18,6 +19,7 @@ __all__ = [
     "VolcEngineChatConfig",
     "VolcEngineConfig",  # backward compatibility
     "VolcEngineEmbeddingConfig",
+    "VolcEngineResponsesAPIConfig",
     "VolcEngineError",
     "get_volcengine_base_url",
     "get_volcengine_headers",
