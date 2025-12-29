@@ -4,7 +4,7 @@ import httpx
 
 import litellm
 from litellm._logging import verbose_logger
-from litellm.types.llms.openai import ResponseInputParam
+from litellm.types.llms.openai import ResponseInputParam, ResponsesAPIStreamingResponse
 from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
 from litellm.litellm_core_utils.core_helpers import process_response_headers
 from litellm.litellm_core_utils.llm_response_utils.convert_dict_to_response import (
@@ -199,6 +199,30 @@ class VolcEngineResponsesAPIConfig(OpenAIResponsesAPIConfig):
             response_api_optional_request_params=sanitized_optional,
             litellm_params=litellm_params,
             headers=headers,
+        )
+
+    def transform_streaming_response(
+        self,
+        model: str,
+        parsed_chunk: dict,
+        logging_obj: LiteLLMLoggingObj,
+    ) -> ResponsesAPIStreamingResponse:
+        """
+        Volcengine may omit 'output' on early streaming events; inject an empty list
+        to satisfy the event schema and reuse OpenAI event models.
+        """
+        chunk = parsed_chunk
+        if isinstance(chunk, dict):
+            response_obj = chunk.get("response")
+            if isinstance(response_obj, dict) and "output" not in response_obj:
+                patched_chunk = dict(chunk)
+                patched_response = dict(response_obj)
+                patched_response.setdefault("output", [])
+                patched_chunk["response"] = patched_response
+                chunk = patched_chunk
+
+        return super().transform_streaming_response(
+            model=model, parsed_chunk=chunk, logging_obj=logging_obj
         )
 
     def transform_response_api_response(
