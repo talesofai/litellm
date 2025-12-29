@@ -378,3 +378,14 @@ class VolcEngineResponsesAPIConfig(OpenAIResponsesAPIConfig):
         response._hidden_params["additional_headers"] = processed_headers
         response._hidden_params["headers"] = raw_response_headers
         return response
+
+    def should_fake_stream(
+        self,
+        model: Optional[str],
+        stream: Optional[bool],
+        custom_llm_provider: Optional[str] = None,
+    ) -> bool:
+        """
+        Volcengine Responses API supports native streaming; never fall back to fake stream.
+        """
+        return False
