@@ -220,6 +220,12 @@ class VolcEngineResponsesAPIConfig(OpenAIResponsesAPIConfig):
                 patched_response.setdefault("output", [])
                 patched_chunk["response"] = patched_response
                 chunk = patched_chunk
+            # Provide default output_index for content part events (provider may omit)
+            if "output_index" not in chunk and isinstance(chunk.get("type"), str):
+                if "content_part" in chunk["type"] or "output_item" in chunk["type"]:
+                    patched_chunk = dict(chunk)
+                    patched_chunk["output_index"] = 0
+                    chunk = patched_chunk
 
         return super().transform_streaming_response(
             model=model, parsed_chunk=chunk, logging_obj=logging_obj
