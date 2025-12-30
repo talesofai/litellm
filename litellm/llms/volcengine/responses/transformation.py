@@ -1,6 +1,18 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Tuple,
+    Union,
+    get_args,
+    get_origin,
+)
 
 import httpx
+from pydantic import fields as pyd_fields
 
 import litellm
 from litellm._logging import verbose_logger
@@ -208,28 +220,28 @@ class VolcEngineResponsesAPIConfig(OpenAIResponsesAPIConfig):
         logging_obj: LiteLLMLoggingObj,
     ) -> ResponsesAPIStreamingResponse:
         """
-        Volcengine may omit 'output' on early streaming events; inject an empty list
-        to satisfy the event schema and reuse OpenAI event models.
+        Volcengine may omit required fields; auto-fill them using event model defaults.
         """
         chunk = parsed_chunk
-        if isinstance(chunk, dict):
-            response_obj = chunk.get("response")
-            if isinstance(response_obj, dict) and "output" not in response_obj:
-                patched_chunk = dict(chunk)
-                patched_response = dict(response_obj)
-                patched_response.setdefault("output", [])
-                patched_chunk["response"] = patched_response
-                chunk = patched_chunk
-            # Provide default output_index for content part events (provider may omit)
-            if "output_index" not in chunk and isinstance(chunk.get("type"), str):
-                if "content_part" in chunk["type"] or "output_item" in chunk["type"]:
-                    patched_chunk = dict(chunk)
-                    patched_chunk["output_index"] = 0
-                    chunk = patched_chunk
 
-        return super().transform_streaming_response(
-            model=model, parsed_chunk=chunk, logging_obj=logging_obj
+        # Patch missing response.output on response.* events
+        if isinstance(chunk, dict):
+            resp = chunk.get("response")
+            if isinstance(resp, dict) and "output" not in resp:
+                patched_chunk = dict(chunk)
+                patched_resp = dict(resp)
+                patched_resp["output"] = []
+                patched_chunk["response"] = patched_resp
+                chunk = patched_chunk
+
+        event_type = str(chunk.get("type")) if isinstance(chunk, dict) else None
+        event_pydantic_model = OpenAIResponsesAPIConfig.get_event_model_class(
+            event_type=event_type
         )
+
+        patched_chunk = self._fill_missing_fields(chunk, event_pydantic_model)
+
+        return event_pydantic_model(**patched_chunk)
 
     def transform_response_api_response(
         self,
@@ -419,3 +431,124 @@ class VolcEngineResponsesAPIConfig(OpenAIResponsesAPIConfig):
         Volcengine Responses API supports native streaming; never fall back to fake stream.
         """
         return False
+
+    @staticmethod
+    def _fill_missing_fields(
+        chunk: Any, event_model: Any
+    ) -> Dict[str, Any]:
+        """
+        Heuristically fill missing required fields with safe defaults based on the
+        event model's field annotations. This keeps parsing tolerant of providers that
+        omit non-essential fields.
+        """
+        if not isinstance(chunk, dict) or event_model is None:
+            return chunk
+
+        patched: Dict[str, Any] = dict(chunk)
+        fields_map = getattr(event_model, "model_fields", {}) or {}
+
+        for name, field in fields_map.items():
+            if name in patched:
+                patched[name] = VolcEngineResponsesAPIConfig._maybe_fill_nested(
+                    patched[name], field.annotation
+                )
+                continue
+
+            # Explicit default or factory
+            if field.default is not pyd_fields.PydanticUndefined and field.default is not None:
+                patched[name] = field.default
+                continue
+            if (
+                field.default_factory is not None
+                and field.default_factory is not pyd_fields.PydanticUndefined
+            ):
+                patched[name] = field.default_factory()
+                continue
+
+            # Heuristic defaults for missing required fields
+            patched[name] = VolcEngineResponsesAPIConfig._default_for_annotation(
+                field.annotation
+            )
+
+        return patched
+
+    @staticmethod
+    def _default_for_annotation(annotation: Any) -> Any:
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+
+        if annotation is int:
+            return 0
+        if annotation is list or origin is list:
+            return []
+        if origin is Union:
+            # Prefer empty list when any option is a list
+            if any((arg is list or get_origin(arg) is list) for arg in args):
+                return []
+            if type(None) in args:
+                return None
+        if origin is Union and type(None) in args:
+            return None
+
+        # Fallback to None when no safer guess exists
+        return None
+
+    @staticmethod
+    def _maybe_fill_nested(value: Any, annotation: Any) -> Any:
+        """
+        Recursively fill nested dict/list structures based on the annotated model.
+        """
+        model_cls = VolcEngineResponsesAPIConfig._pick_model_class(annotation, value)
+        origin = get_origin(annotation)
+        args = get_args(annotation)
+
+        if isinstance(value, dict) and model_cls is not None:
+            return VolcEngineResponsesAPIConfig._fill_missing_fields(value, model_cls)
+
+        if isinstance(value, list):
+            # Attempt to fill list elements if we know the element annotation
+            elem_ann: Any = args[0] if args else None
+            if elem_ann is not None:
+                return [
+                    VolcEngineResponsesAPIConfig._maybe_fill_nested(v, elem_ann)
+                    for v in value
+                ]
+
+        return value
+
+    @staticmethod
+    def _pick_model_class(annotation: Any, value: Any) -> Optional[Any]:
+        """
+        Choose the best-matching Pydantic model class for a nested dict.
+        """
+        candidates: List[Any] = []
+        origin = get_origin(annotation)
+
+        if hasattr(annotation, "model_fields"):
+            candidates.append(annotation)
+        if origin is Union:
+            for arg in get_args(annotation):
+                if hasattr(arg, "model_fields"):
+                    candidates.append(arg)
+
+        if not candidates:
+            return None
+
+        # Try to match by literal "type" field when available
+        if isinstance(value, dict):
+            v_type = value.get("type")
+            for candidate in candidates:
+                try:
+                    type_field = candidate.model_fields.get("type")
+                    if type_field is None:
+                        continue
+                    literal_ann = type_field.annotation
+                    if get_origin(literal_ann) is Literal:
+                        literal_values = get_args(literal_ann)
+                        if v_type in literal_values:
+                            return candidate
+                except Exception:
+                    continue
+
+        # Fall back to the first candidate
+        return candidates[0]
